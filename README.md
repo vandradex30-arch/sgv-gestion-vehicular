@@ -1,6 +1,6 @@
 # SGV – Sistema Integral de Gestión Vehicular
 
-Estado: **Etapa 1 (identidad, permisos y auditoría)** sobre la Etapa 0 (fundaciones). El diseño completo está en el documento «SGV – Arquitectura técnica v2 (aprobada)».
+Estado: **Etapa 2a (servidor de sincronización)** sobre la Etapa 1 (identidad, permisos y auditoría) y la Etapa 0 (fundaciones). El diseño completo está en el documento «SGV – Arquitectura técnica v2 (aprobada)».
 
 ## Estructura
 
@@ -27,6 +27,24 @@ infra/db               Roles, migraciones SQL, verificaciones y pruebas SQL
 - Cada petición protegida verifica, dentro de su transacción, que sesión, dispositivo y usuario sigan vigentes, y luego el permiso `recurso:acción`. Revocar un dispositivo o desactivar un usuario surte efecto de inmediato.
 - `POST/GET /users`, `PATCH /users/:id/status`, `GET /devices`, `POST /devices/:id/revoke`, `GET /audit`.
 - El cliente genera un `deviceId` distinto por usuario en cada instalación (coincide con la base local por usuario del diseño).
+
+## Qué hay en la Etapa 2a (servidor de sincronización)
+
+La Etapa 2 se entrega en tres partes, cada una verificada antes de seguir:
+**2a** servidor de sincronización (esta), **2b** motor del dispositivo (IndexedDB cifrada, cola de salida, simulador de dos dispositivos) y **2c** pantallas, cierre de sesión seguro, cuarentena y recuperación.
+
+- **Orden por secuencia del servidor:** cada cambio recibe un número por organización (`server_seq`), asignado por la base de datos bajo un candado que dura hasta confirmar la transacción. Así el orden coincide con el de confirmación y el pull nunca se salta cambios. Los relojes de los dispositivos no ordenan nada.
+- **Columnas comunes a prueba de falsificación:** versión, fechas del servidor, usuario y dispositivo de origen y secuencia las fija un trigger. El cliente no puede enviarlas.
+- **`POST /sync/push`** (hasta 50 operaciones): idempotente por `operationId`. Cada operación termina `aplicada`, `duplicada` (reintento), `conflicto` o `rechazada`; una operación fallida no afecta al resto del lote.
+- **`POST /sync/pull`**: cambios desde un cursor, con paginación y eliminaciones lógicas.
+- **Fusión por campo:** si dos dispositivos cambian campos distintos se combinan solos; si cambian el mismo campo crítico se abre un conflicto; en el texto libre (`notes`) gana el último cambio recibido.
+- **Duplicados:** misma patente en el mismo vehículo nuevo = `duplicado_probable`, que solo se resuelve aceptando lo que ya existe.
+- **Conflictos:** `GET /sync/conflicts` y `POST /sync/conflicts/:id/resolve` (servidor, cliente o manual). Cada resolución es un cambio normal, auditado.
+- **Permisos:** cada operación se valida contra la matriz (crear, editar y dar de baja = `vehicle:create`, `vehicle:update` y `vehicle:approve`); sin permiso queda como conflicto de tipo `permiso`, conservando el cambio.
+- **Entidad piloto:** `vehicles` (patente, marca, modelo, año, notas). La Etapa 3 la amplía; el motor es genérico y se alimenta de `src/sync/entity-registry.ts`.
+
+Pendiente de la Etapa 2c: cuarentena de operaciones de dispositivos revocados y paquete de recuperación.
+Pendiente de las Etapas 3 a 5: alcances `assigned` y `own` en lectura (hoy el conductor no recibe vehículos porque aún no hay asignaciones).
 
 ## Puesta en marcha local
 

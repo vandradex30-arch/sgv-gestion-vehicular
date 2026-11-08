@@ -7,7 +7,7 @@
     "db:up": "docker compose up -d db",
     "db:migrate": "bash infra/db/migrate.sh",
     "db:check": "psql \"$DATABASE_URL_OWNER\" -v ON_ERROR_STOP=1 -f infra/db/checks/rls_coverage.sql",
-    "db:test": "psql \"$DATABASE_URL_OWNER\" -v ON_ERROR_STOP=1 -f infra/db/tests/rls_probe_test.sql && psql \"$DATABASE_URL_OWNER\" -v ON_ERROR_STOP=1 -f infra/db/tests/auth_matrix_test.sql",
+    "db:test": "psql \"$DATABASE_URL_OWNER\" -v ON_ERROR_STOP=1 -f infra/db/tests/rls_probe_test.sql && psql \"$DATABASE_URL_OWNER\" -v ON_ERROR_STOP=1 -f infra/db/tests/auth_matrix_test.sql && psql \"$DATABASE_URL_OWNER\" -v ON_ERROR_STOP=1 -f infra/db/tests/sync_test.sql",
     "build": "pnpm -r build",
     "test": "pnpm -r test"
   }

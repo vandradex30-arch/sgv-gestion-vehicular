@@ -7,6 +7,7 @@ import { DatabaseModule } from './database/database.module';
 import { DevicesModule } from './devices/devices.module';
 import { HealthModule } from './health/health.module';
 import { ProbeModule } from './probe/probe.module';
+import { SyncModule } from './sync/sync.module';
 import { UsersModule } from './users/users.module';
 
 const env = loadEnv();
@@ -20,6 +21,7 @@ const env = loadEnv();
     UsersModule,
     DevicesModule,
     AuditModule,
+    SyncModule,
     ...(env.allowDevActor ? [ProbeModule] : []),
   ],
 })
