@@ -2,7 +2,7 @@ import { Global, Inject, Module, OnApplicationShutdown } from '@nestjs/common';
 import { Pool } from 'pg';
 import { ENV, Env, loadEnv } from '../config/env';
 import { ActorResolver } from './actor';
-import { DenyAllActorResolver, DevActorResolver } from './actor-resolvers';
+import { ChainedActorResolver, DevActorResolver, JwtActorResolver } from './actor-resolvers';
 import { TenantDb } from './tenant-db.service';
 import { TenantTransactionInterceptor } from './tenant-transaction.interceptor';
 import { PG_POOL } from './tokens';
@@ -19,8 +19,12 @@ import { PG_POOL } from './tokens';
     {
       provide: ActorResolver,
       inject: [ENV],
-      useFactory: (env: Env): ActorResolver =>
-        env.allowDevActor ? new DevActorResolver() : new DenyAllActorResolver(),
+      useFactory: (env: Env): ActorResolver => {
+        const jwtResolver = new JwtActorResolver(env.jwtSecret);
+        return env.allowDevActor
+          ? new ChainedActorResolver([jwtResolver, new DevActorResolver()])
+          : jwtResolver;
+      },
     },
     TenantDb,
     TenantTransactionInterceptor,

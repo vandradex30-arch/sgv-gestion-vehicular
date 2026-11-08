@@ -11,8 +11,40 @@ export const ROLE_CODES = [
 ] as const;
 export type RoleCode = (typeof ROLE_CODES)[number];
 
-export const PERMISSION_ACTIONS = ['read', 'create', 'update', 'validate', 'approve', 'export'] as const;
+export const PERMISSION_ACTIONS = [
+  'read',
+  'create',
+  'update',
+  'validate',
+  'approve',
+  'export',
+  'authorize',
+  'resolve',
+  'manage',
+] as const;
 export type PermissionAction = (typeof PERMISSION_ACTIONS)[number];
+
+export const PERMISSION_RESOURCES = [
+  'vehicle',
+  'movement',
+  'fuel_load',
+  'generator_fuel_load',
+  'generator',
+  'generator_schedule',
+  'generator_reading',
+  'vehicle_maintenance',
+  'generator_maintenance',
+  'generator_fault',
+  'report',
+  'report_responsible',
+  'audit',
+  'correction_request',
+  'conflict',
+  'user',
+  'device',
+  'backup',
+] as const;
+export type PermissionResource = (typeof PERMISSION_RESOURCES)[number];
 
 export const PERMISSION_SCOPES = ['all', 'assigned', 'own'] as const;
 export type PermissionScope = (typeof PERMISSION_SCOPES)[number];

@@ -23,6 +23,7 @@ suite('RLS base (integración con PostgreSQL real)', () => {
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
     process.env.ALLOW_DEV_ACTOR = 'true';
+    process.env.JWT_SECRET = 'prueba-jwt-secret-prueba-jwt-secret-0123456789';
     // Un solo cliente en el pool: fuerza a reutilizar la conexión y prueba que el contexto no se filtra.
     process.env.DB_POOL_MAX = '1';
     const { AppModule } = await import('../src/app.module');

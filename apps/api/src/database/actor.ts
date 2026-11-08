@@ -1,8 +1,9 @@
-/** Quién hace la petición. En la Etapa 1 se obtiene del JWT y del dispositivo registrado. */
+/** Quién hace la petición. Con sesión real viene del JWT; sessionId solo existe en ese caso. */
 export interface Actor {
   userId: string;
   organizationId: string;
   deviceId?: string | null;
+  sessionId?: string | null;
 }
 
 export interface RequestLike {

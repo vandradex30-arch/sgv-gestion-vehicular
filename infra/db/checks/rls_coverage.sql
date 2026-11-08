@@ -1,4 +1,4 @@
--- Falla (y por tanto la CI) si hay tablas sin RLS forzado o con DELETE para la app.
+-- Falla (y por tanto la CI) si se rompe alguna garantía estructural de seguridad.
 DO $$
 DECLARE
   sin_rls text;
@@ -20,5 +20,22 @@ BEGIN
   IF con_delete IS NOT NULL THEN
     RAISE EXCEPTION 'Tablas con DELETE concedido a la aplicación (la eliminación debe ser lógica): %', con_delete;
   END IF;
+
+  IF has_column_privilege('sgv_app', 'public.users', 'password_hash', 'SELECT') THEN
+    RAISE EXCEPTION 'La aplicación puede leer users.password_hash';
+  END IF;
+  IF has_column_privilege('sgv_app', 'public.users', 'failed_attempts', 'SELECT')
+     OR has_column_privilege('sgv_app', 'public.users', 'locked_until', 'SELECT') THEN
+    RAISE EXCEPTION 'La aplicación puede leer los contadores de bloqueo de users';
+  END IF;
+  IF has_table_privilege('sgv_app', 'public.audit_log', 'INSERT')
+     OR has_table_privilege('sgv_app', 'public.audit_log', 'UPDATE')
+     OR has_table_privilege('sgv_app', 'public.audit_log', 'DELETE')
+     OR has_table_privilege('sgv_app', 'public.audit_log', 'TRUNCATE') THEN
+    RAISE EXCEPTION 'La aplicación puede modificar audit_log directamente';
+  END IF;
+  IF has_column_privilege('sgv_app', 'public.devices', 'status', 'UPDATE') THEN
+    RAISE EXCEPTION 'La aplicación puede cambiar devices.status sin pasar por app.revoke_device()';
+  END IF;
 END $$;
-\echo 'OK: todas las tablas tienen RLS forzado y ninguna permite DELETE a la aplicación'
+\echo 'OK: RLS forzado en todas las tablas, sin DELETE, y secretos/auditoría protegidos'

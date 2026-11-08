@@ -18,13 +18,13 @@ jobs:
     env:
       DATABASE_URL_OWNER: postgres://sgv_owner:owner_ci@localhost:5432/sgv
       DATABASE_URL_APP: postgres://sgv_app:app_ci@localhost:5432/sgv
+      JWT_SECRET: ci-jwt-secret-ci-jwt-secret-ci-jwt-secret-0123456789
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
       # Cambiar a --frozen-lockfile cuando pnpm-lock.yaml esté en el repositorio
       - run: pnpm install --no-frozen-lockfile
       - name: Roles de la aplicación
@@ -35,6 +35,8 @@ jobs:
         run: psql "$DATABASE_URL_OWNER" -v ON_ERROR_STOP=1 -f infra/db/checks/rls_coverage.sql
       - name: Pruebas SQL de aislamiento
         run: psql "$DATABASE_URL_OWNER" -v ON_ERROR_STOP=1 -f infra/db/tests/rls_probe_test.sql
+      - name: Pruebas SQL de matriz, aislamiento y auditoría
+        run: psql "$DATABASE_URL_OWNER" -v ON_ERROR_STOP=1 -f infra/db/tests/auth_matrix_test.sql
       - name: Compilar
         run: pnpm -r build
       - name: Pruebas de la API

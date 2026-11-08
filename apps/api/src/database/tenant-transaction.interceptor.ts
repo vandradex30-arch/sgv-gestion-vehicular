@@ -22,6 +22,7 @@ export class TenantTransactionInterceptor implements NestInterceptor {
     if (!actor) {
       throw new UnauthorizedException();
     }
+    req.actor = actor;
     return from(
       this.db.runInTransaction(actor, () => lastValueFrom(next.handle(), { defaultValue: undefined })),
     );
