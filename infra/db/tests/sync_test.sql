@@ -133,6 +133,36 @@ DO $$ BEGIN
   END;
 END $$;
 
+-- 11. Conflictos: con alcance "own" solo se ven los propios; con alcance total, todos
+RESET ROLE;
+INSERT INTO public.users (id, organization_id, email, full_name, password_hash)
+VALUES ('a2000000-0000-0000-0000-000000000003', 'aaaaaaaa-2222-0000-0000-000000000001', 'con@sync.test', 'Conductor', 'x');
+INSERT INTO public.user_roles (organization_id, user_id, role_id)
+SELECT 'aaaaaaaa-2222-0000-0000-000000000001'::uuid, 'a2000000-0000-0000-0000-000000000003'::uuid, id
+  FROM public.roles WHERE code = 'conductor_operador';
+INSERT INTO public.devices (id, organization_id, user_id, label, platform) VALUES
+  ('d2000000-0000-0000-0000-000000000001', 'aaaaaaaa-2222-0000-0000-000000000001', 'a2000000-0000-0000-0000-000000000001', 'PC', 'web'),
+  ('d2000000-0000-0000-0000-000000000003', 'aaaaaaaa-2222-0000-0000-000000000001', 'a2000000-0000-0000-0000-000000000003', 'Celular', 'web');
+INSERT INTO public.sync_conflicts (organization_id, entity_type, entity_id, conflict_type, operation_id, kind, device_id, user_id, client_patch) VALUES
+  ('aaaaaaaa-2222-0000-0000-000000000001', 'vehicle', 'c0000000-0000-0000-0000-0000000000f1', 'permiso',
+   'e0000000-0000-0000-0000-000000000001', 'create', 'd2000000-0000-0000-0000-000000000001', 'a2000000-0000-0000-0000-000000000001', '{}'),
+  ('aaaaaaaa-2222-0000-0000-000000000001', 'vehicle', 'c0000000-0000-0000-0000-0000000000f2', 'permiso',
+   'e0000000-0000-0000-0000-000000000002', 'create', 'd2000000-0000-0000-0000-000000000003', 'a2000000-0000-0000-0000-000000000003', '{}');
+SET LOCAL ROLE sgv_app;
+SELECT app.set_context('a2000000-0000-0000-0000-000000000003', 'aaaaaaaa-2222-0000-0000-000000000001', NULL);
+DO $$ BEGIN
+  IF (SELECT count(*) FROM public.sync_conflicts) <> 1
+     OR NOT EXISTS (SELECT 1 FROM public.sync_conflicts WHERE user_id = 'a2000000-0000-0000-0000-000000000003') THEN
+    RAISE EXCEPTION 'FALLO: el conductor debe ver solo su propio conflicto';
+  END IF;
+END $$;
+SELECT app.set_context('a2000000-0000-0000-0000-000000000001', 'aaaaaaaa-2222-0000-0000-000000000001', NULL);
+DO $$ BEGIN
+  IF (SELECT count(*) FROM public.sync_conflicts) <> 2 THEN
+    RAISE EXCEPTION 'FALLO: el administrador debe ver todos los conflictos de su organización';
+  END IF;
+END $$;
+
 RESET ROLE;
 ROLLBACK;
 \echo 'OK: pruebas de sincronización en la base de datos superadas'
