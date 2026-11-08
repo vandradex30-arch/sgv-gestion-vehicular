@@ -1,0 +1,41 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sgv_owner
+          POSTGRES_PASSWORD: owner_ci
+          POSTGRES_DB: sgv
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sgv_owner -d sgv"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL_OWNER: postgres://sgv_owner:owner_ci@localhost:5432/sgv
+      DATABASE_URL_APP: postgres://sgv_app:app_ci@localhost:5432/sgv
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      # Cambiar a --frozen-lockfile cuando pnpm-lock.yaml esté en el repositorio
+      - run: pnpm install --no-frozen-lockfile
+      - name: Roles de la aplicación
+        run: psql "$DATABASE_URL_OWNER" -v ON_ERROR_STOP=1 -v app_password=app_ci -v worker_password=worker_ci -f infra/db/roles.sql
+      - name: Migraciones
+        run: bash infra/db/migrate.sh
+      - name: Cobertura de RLS
+        run: psql "$DATABASE_URL_OWNER" -v ON_ERROR_STOP=1 -f infra/db/checks/rls_coverage.sql
+      - name: Pruebas SQL de aislamiento
+        run: psql "$DATABASE_URL_OWNER" -v ON_ERROR_STOP=1 -f infra/db/tests/rls_probe_test.sql
+      - name: Compilar
+        run: pnpm -r build
+      - name: Pruebas de la API
+        run: pnpm --filter @sgv/api test

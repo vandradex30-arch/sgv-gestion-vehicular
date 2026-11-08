@@ -1,0 +1,17 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: sgv_owner
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?definir en .env}
+      POSTGRES_DB: sgv
+      SGV_APP_PASSWORD: ${SGV_APP_PASSWORD:?definir en .env}
+      SGV_WORKER_PASSWORD: ${SGV_WORKER_PASSWORD:?definir en .env}
+    ports:
+      - "5432:5432"
+    volumes:
+      - sgv_pgdata:/var/lib/postgresql/data
+      - ./infra/db/init/00_roles.sh:/docker-entrypoint-initdb.d/00_roles.sh:ro
+      - ./infra/db/roles.sql:/sgv/roles.sql:ro
+volumes:
+  sgv_pgdata:
