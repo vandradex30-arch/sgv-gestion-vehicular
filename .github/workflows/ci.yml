@@ -41,5 +41,7 @@ jobs:
         run: psql "$DATABASE_URL_OWNER" -v ON_ERROR_STOP=1 -f infra/db/tests/sync_test.sql
       - name: Compilar
         run: pnpm -r build
+      - name: Pruebas del motor del dispositivo
+        run: pnpm --filter @sgv/sync-client test
       - name: Pruebas de la API
         run: pnpm --filter @sgv/api test

@@ -446,7 +446,7 @@ export class SyncService {
   async listConflicts(status: string): Promise<unknown[]> {
     const result = await this.db.query(
       `SELECT id, entity_type AS "entityType", entity_id AS "entityId", conflict_type AS "conflictType",
-              kind, user_id AS "userId", server_version AS "serverVersion",
+              operation_id AS "operationId", kind, user_id AS "userId", server_version AS "serverVersion",
               client_base_version AS "clientBaseVersion", server_snapshot AS "serverSnapshot",
               client_patch AS "clientPatch", conflicting_fields AS "conflictingFields",
               status, resolution, created_at AS "createdAt"

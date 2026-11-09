@@ -1,6 +1,6 @@
 # SGV – Sistema Integral de Gestión Vehicular
 
-Estado: **Etapa 2a (servidor de sincronización)** sobre la Etapa 1 (identidad, permisos y auditoría) y la Etapa 0 (fundaciones). El diseño completo está en el documento «SGV – Arquitectura técnica v2 (aprobada)».
+Estado: **Etapa 2b (motor del dispositivo)** sobre la Etapa 2a (servidor de sincronización), la Etapa 1 (identidad, permisos y auditoría) y la Etapa 0 (fundaciones). El diseño completo está en el documento «SGV – Arquitectura técnica v2 (aprobada)».
 
 ## Estructura
 
@@ -45,6 +45,22 @@ La Etapa 2 se entrega en tres partes, cada una verificada antes de seguir:
 
 Pendiente de la Etapa 2c: cuarentena de operaciones de dispositivos revocados y paquete de recuperación.
 Pendiente de las Etapas 3 a 5: alcances `assigned` y `own` en lectura (hoy el conductor no recibe vehículos porque aún no hay asignaciones).
+
+## Qué hay en la Etapa 2b (motor del dispositivo): `packages/sync-client`
+
+Biblioteca sin interfaz gráfica, pensada para que la Etapa 2c solo agregue pantallas encima.
+
+- **Base local cifrada (IndexedDB + Dexie):** una base por usuario y organización. Solo los campos de índice (tipo, id, estado) están en claro; todo el contenido va cifrado con AES-GCM de 256 bits, ligado a su registro (copiar el contenido de un registro a otro se detecta).
+- **Claves:** clave de datos aleatoria, protegida con una clave derivada de la contraseña o PIN (Argon2id en WebAssembly). Cambiar el PIN solo re-protege la clave. Tras 3 fallos hay esperas crecientes; tras 10 se exige iniciar sesión en línea; nunca se borran datos por intentos fallidos.
+- **Cola de cambios:** cada guardado actualiza el registro y encola su operación en una sola transacción. Un doble toque en "Guardar" no duplica (mismo `operationId`); los cambios sucesivos antes de enviar se acumulan en uno; crear y eliminar antes de sincronizar no deja rastro.
+- **Sincronización:** primero envía (un cambio por registro en cada ronda, en el orden del dispositivo) y después recibe. Ante corte de red, respuesta perdida o cierre de la app a mitad del envío, nada se pierde ni se duplica.
+- **Conflictos:** el registro queda en estado `conflicto`, lo local no se pierde, los cambios siguientes sobre ese registro esperan y los de otros registros siguen. Se resuelve eligiendo servidor, cliente o manual.
+- **Cierre de sesión seguro:** `safeWipe()` se niega mientras haya registros sin sincronizar.
+- **Sesión:** `AuthClient` renueva el token con una sola renovación compartida y `HttpTransport` distingue sin conexión (se reintenta), sesión inválida (por ejemplo, dispositivo revocado) y errores de protocolo. Un dispositivo revocado pierde el acceso pero conserva sus registros pendientes.
+
+Pruebas: las del motor corren sin servidor (`pnpm --filter @sgv/sync-client test`) y las de dos dispositivos reales contra el servidor y PostgreSQL están en `apps/api/test/two-devices.e2e-spec.ts`.
+
+Pendiente de la Etapa 2c: pantallas, disparadores automáticos (reconexión, volver a primer plano, temporizador), bloqueo al cerrar sesión con pendientes, cuarentena y paquete de recuperación, y la unificación de los tipos del protocolo (hoy duplicados entre `sync-protocol` y `sync-client`).
 
 ## Puesta en marcha local
 

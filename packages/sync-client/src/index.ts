@@ -1,0 +1,13 @@
+export * from './errors';
+export * from './protocol';
+export * from './types';
+export { DEFAULT_KDF } from './crypto';
+export type { KdfOptions } from './crypto';
+export { LocalStore } from './store';
+export type { StoreOptions } from './store';
+export { SyncEngine } from './engine';
+export type { EngineOptions } from './engine';
+export { HttpTransport } from './transport';
+export type { SyncTransport, HttpTransportOptions } from './transport';
+export { AuthClient } from './auth-client';
+export type { LoginInput } from './auth-client';
