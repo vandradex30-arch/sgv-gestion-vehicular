@@ -1,6 +1,6 @@
 # SGV – Sistema Integral de Gestión Vehicular
 
-Estado: **Etapa 2b (motor del dispositivo)** sobre la Etapa 2a (servidor de sincronización), la Etapa 1 (identidad, permisos y auditoría) y la Etapa 0 (fundaciones). El diseño completo está en el documento «SGV – Arquitectura técnica v2 (aprobada)».
+Estado: **Etapa 2c, primera parte (sesión, sincronización automática y recuperación)** sobre la Etapa 2b (motor del dispositivo), la Etapa 2a (servidor de sincronización), la Etapa 1 (identidad, permisos y auditoría) y la Etapa 0 (fundaciones). El diseño completo está en el documento «SGV – Arquitectura técnica v2 (aprobada)».
 
 ## Estructura
 
@@ -61,6 +61,22 @@ Biblioteca sin interfaz gráfica, pensada para que la Etapa 2c solo agregue pant
 Pruebas: las del motor corren sin servidor (`pnpm --filter @sgv/sync-client test`) y las de dos dispositivos reales contra el servidor y PostgreSQL están en `apps/api/test/two-devices.e2e-spec.ts`.
 
 Pendiente de la Etapa 2c: pantallas, disparadores automáticos (reconexión, volver a primer plano, temporizador), bloqueo al cerrar sesión con pendientes, cuarentena y paquete de recuperación, y la unificación de los tipos del protocolo (hoy duplicados entre `sync-protocol` y `sync-client`).
+
+## Qué hay en la Etapa 2c (primera parte: mecánica, sin pantallas)
+
+- **`AutoSync`** (dispositivo): sincroniza al abrir, al volver la conexión, al volver a primer plano, poco después de guardar (agrupando guardados seguidos) y cada cierto tiempo. Sin conexión reintenta con esperas crecientes (5 s, 10 s, 20 s... hasta 5 min) y se recupera de inmediato cuando vuelve la red. En iOS no existe sincronización con la app cerrada: todo ocurre con ella abierta.
+- **`SessionManager`** (dispositivo): coordina el ciclo de vida de la sesión con una regla central: **cerrar sesión o perder el acceso nunca borra registros sin confirmar**.
+  - Cerrar sesión: sincroniza primero. Si todo se confirmó, borra los datos locales; si no, bloquea el equipo, conserva todo y lo informa.
+  - Plazo máximo sin verificar en línea (7 días por defecto): pasado el plazo se exige reconectar, sin tocar los datos.
+  - Bloqueo por inactividad.
+  - Dispositivo revocado o usuario desactivado: cuarentena (todo conservado y bloqueado). El borrado solo se permite después de exportar un paquete de recuperación que incluya cada operación pendiente; si se agrega algo después de exportar, se exige exportar otra vez.
+- **Paquete de recuperación:** las operaciones pendientes cifradas con la llave pública de la organización (RSA-OAEP + AES-GCM). El dispositivo guarda esa llave al iniciar sesión (`GET /sync/recovery-key`), así que puede exportar sin conexión. Solo el servidor, con la llave privada, lo abre.
+- **Cuarentena en el servidor:** `POST /sync/quarantine/import`, `GET /sync/quarantine`, `POST /sync/quarantine/:id/review`. Solo quien administra dispositivos. Valida que el paquete sea de la misma organización y que el dispositivo corresponda al usuario, impide importar dos veces el mismo paquete y deja todo auditado. **Las operaciones no se aplican solas**: el administrador las revisa y marca como aceptada (registrada a mano) o descartada.
+- **Llaves de la organización:** `pnpm --filter @sgv/api build` y luego `pnpm --filter @sgv/api create-recovery-keys` imprime `RECOVERY_PUBLIC_KEY` y `RECOVERY_PRIVATE_KEY`. La privada es secreta: va solo en la configuración del servidor y debe respaldarse aparte; sin ella los paquetes ya exportados no se pueden abrir.
+
+Decisión pendiente (Etapa 7): si un día se quiere aplicar automáticamente lo recuperado, hay que decidir a nombre de quién queda (el administrador o el usuario original). Mientras tanto la revisión es manual.
+
+Pendiente de la Etapa 2c (segunda parte): las pantallas.
 
 ## Puesta en marcha local
 

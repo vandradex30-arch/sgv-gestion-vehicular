@@ -8,7 +8,8 @@ import {
   VaultLockedError,
   WrongSecretError,
 } from './errors';
-import type { OperationResult, PullResponse, ServerConflict } from './protocol';
+import type { OperationKind, OperationResult, PullResponse, ServerConflict } from './protocol';
+import type { RecoveryOp } from './recovery';
 import type {
   BatchItem,
   LocalRecord,
@@ -94,6 +95,7 @@ export class LocalStore {
   private dek: CryptoKey | null = null;
   private readonly mutex = new Mutex();
   private readonly now: () => number;
+  private readonly listeners = new Set<() => void>();
 
   private constructor(
     private readonly db: SgvDb,
@@ -186,6 +188,35 @@ export class LocalStore {
     return new Date(this.now()).toISOString();
   }
 
+  /** Avisa cuando el usuario guarda algo (la sincronización automática lo usa para enviar pronto). */
+  onChange(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private async write<T>(fn: () => Promise<T>): Promise<T> {
+    const result = await this.mutex.run(fn);
+    for (const listener of this.listeners) {
+      try {
+        listener();
+      } catch {
+        // un oyente defectuoso no debe afectar a quien guarda
+      }
+    }
+    return result;
+  }
+
+  /** Valores sueltos del dispositivo (marcas de tiempo, llave pública de recuperación). Nada sensible. */
+  async getMeta<T>(key: string): Promise<T | undefined> {
+    return (await this.db.meta.get(key))?.value as T | undefined;
+  }
+
+  async setMeta(key: string, value: unknown): Promise<void> {
+    await this.db.meta.put({ key, value });
+  }
+
   // ============================================================ lecturas
   private async decryptRecord(row: RecordRow): Promise<RecordPlain> {
     return decryptJson<RecordPlain>(this.requireDek(), row.enc, this.recAad(row.entityType, row.id));
@@ -244,7 +275,7 @@ export class LocalStore {
     fields: Record<string, unknown>,
     ids: { entityId?: string; operationId?: string } = {},
   ): Promise<LocalRecord> {
-    return this.mutex.run(async () => {
+    return this.write(async () => {
       const dek = this.requireDek();
       const entityId = ids.entityId ?? globalThis.crypto.randomUUID();
       const operationId = ids.operationId ?? globalThis.crypto.randomUUID();
@@ -292,7 +323,7 @@ export class LocalStore {
   }
 
   async update(entityType: string, id: string, patch: Record<string, unknown>): Promise<LocalRecord> {
-    return this.mutex.run(async () => {
+    return this.write(async () => {
       const dek = this.requireDek();
       const row = await this.db.records.get([entityType, id]);
       if (!row) throw new Error('El registro no existe');
@@ -354,7 +385,7 @@ export class LocalStore {
 
   /** Eliminación lógica. Si el servidor nunca vio el registro, simplemente desaparece sin dejar rastro. */
   async remove(entityType: string, id: string, options: { reason?: string } = {}): Promise<void> {
-    return this.mutex.run(async () => {
+    return this.write(async () => {
       const dek = this.requireDek();
       const row = await this.db.records.get([entityType, id]);
       if (!row) return;
@@ -836,6 +867,10 @@ export class LocalStore {
   async safeWipe(): Promise<void> {
     const pending = await this.pendingCount();
     if (pending > 0) throw new PendingOperationsError(pending);
+    await this.wipeAll();
+  }
+
+  private async wipeAll(): Promise<void> {
     this.dek = null;
     await this.db.transaction('rw', this.db.records, this.db.outbox, this.db.conflicts, this.db.meta, async () => {
       await this.db.records.clear();
@@ -843,5 +878,51 @@ export class LocalStore {
       await this.db.conflicts.clear();
       await this.db.meta.clear();
     });
+  }
+
+  // ============================================================ recuperación
+  /** Operaciones aún sin confirmar, descifradas, para armar un paquete de recuperación. */
+  async collectRecoveryOps(): Promise<RecoveryOp[]> {
+    const dek = this.requireDek();
+    const rows = (await this.db.outbox.where('status').anyOf(UNCONFIRMED).toArray()).sort(
+      (a, b) => a.deviceSeq - b.deviceSeq,
+    );
+    const out: RecoveryOp[] = [];
+    for (const row of rows) {
+      const plain = await decryptJson<OpPlain>(dek, row.enc, this.opAad(row.operationId));
+      out.push({
+        operationId: row.operationId,
+        entityType: row.entityType,
+        entityId: row.entityId,
+        kind: row.kind as OperationKind,
+        baseVersion: plain.baseVersion,
+        baseFromPrevious: plain.baseFromPrevious,
+        patch: plain.patch,
+        clientUpdatedAt: plain.clientUpdatedAt,
+        deviceSeq: row.deviceSeq,
+        status: row.status as RecoveryOp['status'],
+        conflictType: plain.conflictType,
+        reason: plain.reason,
+      });
+    }
+    return out;
+  }
+
+  /** Anota qué operaciones ya quedaron respaldadas en un paquete de recuperación exportado. */
+  async markRecoveryExported(operationIds: string[]): Promise<void> {
+    const previous = (await this.getMeta<string[]>('recoveryExportedOps')) ?? [];
+    await this.setMeta('recoveryExportedOps', Array.from(new Set([...previous, ...operationIds])));
+  }
+
+  /**
+   * Borrado tras una revocación: solo si cada operación pendiente ya fue exportada en un paquete de
+   * recuperación. Si algo quedó fuera (por ejemplo, se agregó después de exportar), se rechaza.
+   */
+  async wipeAfterRecovery(): Promise<void> {
+    const exported = new Set((await this.getMeta<string[]>('recoveryExportedOps')) ?? []);
+    const pending = await this.db.outbox.where('status').anyOf(UNCONFIRMED).toArray();
+    const missing = pending.filter((o) => !exported.has(o.operationId));
+    if (missing.length > 0) throw new PendingOperationsError(missing.length);
+    await this.wipeAll();
   }
 }

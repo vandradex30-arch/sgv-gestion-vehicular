@@ -65,3 +65,18 @@ export class ProtocolError extends Error {
     this.name = 'ProtocolError';
   }
 }
+
+/** Pasó demasiado tiempo sin verificar la sesión en línea: los datos siguen intactos, pero hay que reconectar. */
+export class GraceExpiredError extends Error {
+  constructor() {
+    super('Hace demasiado que no se verifica la sesión en línea: conéctate para continuar');
+    this.name = 'GraceExpiredError';
+  }
+}
+
+export class NoRecoveryKeyError extends Error {
+  constructor() {
+    super('Este dispositivo no tiene la llave de recuperación de la organización (se obtiene al iniciar sesión en línea)');
+    this.name = 'NoRecoveryKeyError';
+  }
+}

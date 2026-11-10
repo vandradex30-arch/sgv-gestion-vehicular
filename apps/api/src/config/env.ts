@@ -11,6 +11,9 @@ export interface Env {
   refreshTtlDays: number;
   maxFailedAttempts: number;
   lockMinutes: number;
+  /** Llave de recuperación de la organización (RSA). La privada solo vive en el servidor. */
+  recoveryPrivateKeyPem: string | null;
+  recoveryPublicKeySpki: string | null;
 }
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
@@ -38,5 +41,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     refreshTtlDays: Number(source.REFRESH_TTL_DAYS ?? 30),
     maxFailedAttempts: Number(source.MAX_FAILED_ATTEMPTS ?? 5),
     lockMinutes: Number(source.LOCK_MINUTES ?? 15),
+    recoveryPrivateKeyPem: source.RECOVERY_PRIVATE_KEY ? source.RECOVERY_PRIVATE_KEY.replace(/\\n/g, '\n') : null,
+    recoveryPublicKeySpki: source.RECOVERY_PUBLIC_KEY ?? null,
   };
 }
